@@ -1,0 +1,13 @@
+{
+  "name": "nms-planner",
+  "private": true,
+  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview" },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@react-three/fiber": "^8.15.14",
+    "@react-three/drei": "^9.105.6",
+    "three": "^0.160.0"
+  },
+  "devDependencies": { "vite": "^5.2.0" }
+}
