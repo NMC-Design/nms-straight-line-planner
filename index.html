@@ -1,19 +1,158 @@
 <!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>NMS Straight-Line Planner</title>
-    <script type="module">
-      import React from 'react'
-      import { createRoot } from 'react-dom/client'
-      import App from './App.jsx'
-      import './style.css'
-      const root = createRoot(document.getElementById('root'))
-      root.render(React.createElement(App))
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>NMS Straight-Line Planner</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body, html {
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      font-family: sans-serif; background: #0a0a0a; color: #f4f4f5;
+    }
+    #ui {
+      position: absolute; top: 0; left: 0; width: 320px; height: 100%;
+      background: #18181b; border-right: 1px solid #27272a;
+      padding: 1rem; box-sizing: border-box; overflow-y: auto;
+    }
+    #canvas-container {
+      position: absolute; top: 0; left: 320px; right: 0; bottom: 0;
+    }
+    input, button {
+      width: 100%; margin-bottom: 0.5rem; padding: 0.5rem;
+      border: 1px solid #27272a; border-radius: 4px; background: #27272a;
+      color: #f4f4f5;
+    }
+    button { background: #e4e4e7; color: #18181b; cursor: pointer; }
+    button:hover { background: white; }
+    .checkpoint-list { max-height: 40vh; overflow-y: auto; margin-top: 1rem; font-size: 0.9rem; }
+    .checkpoint { display: flex; align-items: center; margin-bottom: 0.25rem; }
+    .checkpoint input { margin-right: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h2>NMS Straight-Line Planner</h2>
+    <label>Start (x,y,z):</label>
+    <input id="start" value="0,0,0">
+    <label>End (x,y,z):</label>
+    <input id="end" value="1000,0,1000">
+    <label>Number of Checkpoints:</label>
+    <input id="num" type="number" value="50">
+    <button id="generate">Generate Route</button>
+    <div id="progress"></div>
+    <div class="checkpoint-list" id="checkpoints"></div>
+  </div>
+  <div id="canvas-container"></div>
+
+  <!-- Load Three.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+  <script>
+    // === Three.js setup ===
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000000);
+
+    const camera = new THREE.PerspectiveCamera(60, container.clientWidth/container.clientHeight, 0.1, 10000);
+    camera.position.set(0, 200, 600);
+
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+    const light = new THREE.PointLight(0xffffff, 1);
+    light.position.set(200,200,200);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x404040));
+
+    // Galaxy sphere
+    const galaxyGeom = new THREE.SphereGeometry(500, 32, 32);
+    const galaxyMat = new THREE.MeshBasicMaterial({wireframe: true, color: 0x333366});
+    const galaxy = new THREE.Mesh(galaxyGeom, galaxyMat);
+    scene.add(galaxy);
+
+    let lineGroup = new THREE.Group();
+    scene.add(lineGroup);
+
+    function generateRoute() {
+      // Clear old route
+      lineGroup.clear();
+
+      const startStr = document.getElementById("start").value.trim();
+      const endStr = document.getElementById("end").value.trim();
+      const num = parseInt(document.getElementById("num").value);
+
+      const start = startStr.split(",").map(Number);
+      const end = endStr.split(",").map(Number);
+
+      const checkpointsDiv = document.getElementById("checkpoints");
+      checkpointsDiv.innerHTML = "";
+
+      const lineMat = new THREE.LineBasicMaterial({color: 0xff4444});
+      const points = [];
+      const checkpoints = [];
+
+      for (let i=0; i<=num; i++) {
+        const t = i/num;
+        const x = start[0] + t*(end[0]-start[0]);
+        const y = start[1] + t*(end[1]-start[1]);
+        const z = start[2] + t*(end[2]-start[2]);
+        points.push(new THREE.Vector3(x,y,z));
+        checkpoints.push([x.toFixed(1), y.toFixed(1), z.toFixed(1)]);
+      }
+
+      const lineGeom = new THREE.BufferGeometry().setFromPoints(points);
+      const line = new THREE.Line(lineGeom, lineMat);
+      lineGroup.add(line);
+
+      // Draw start/end spheres
+      const startMesh = new THREE.Mesh(new THREE.SphereGeometry(5,16,16), new THREE.MeshBasicMaterial({color:0x00ff00}));
+      startMesh.position.set(...start);
+      lineGroup.add(startMesh);
+      const endMesh = new THREE.Mesh(new THREE.SphereGeometry(5,16,16), new THREE.MeshBasicMaterial({color:0xff0000}));
+      endMesh.position.set(...end);
+      lineGroup.add(endMesh);
+
+      // Populate checkpoints list
+      checkpoints.forEach((c,i)=>{
+        const div = document.createElement("div");
+        div.className="checkpoint";
+        const cb = document.createElement("input");
+        cb.type="checkbox"; cb.dataset.index=i;
+        cb.addEventListener("change", updateProgress);
+        div.appendChild(cb);
+        const label = document.createElement("span");
+        label.textContent = i+": ("+c.join(", ")+")";
+        div.appendChild(label);
+        checkpointsDiv.appendChild(div);
+      });
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const checkboxes = document.querySelectorAll(".checkpoint input");
+      let done=0;
+      checkboxes.forEach(cb=>{if(cb.checked) done++;});
+      document.getElementById("progress").textContent =
+        `Progress: ${done}/${checkboxes.length} checkpoints`;
+    }
+
+    document.getElementById("generate").addEventListener("click", generateRoute);
+
+    function animate() {
+      requestAnimationFrame(animate);
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", ()=>{
+      camera.aspect = container.clientWidth/container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+  </script>
+</body>
 </html>
